@@ -1,6 +1,6 @@
 build:
 	dep ensure -v
-	go build -ldflags="-s -w" -o bin/bindery main.go log.go version.go
+	go build -ldflags="-s -w" -o bin/bindery main.go log.go version.go image.go
 
 .PHONY: clean
 clean:

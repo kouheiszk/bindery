@@ -3,13 +3,12 @@ package main
 import (
 	"errors"
 	"fmt"
+	"github.com/jessevdk/go-flags"
 	"os"
 	"os/signal"
 	"path/filepath"
 	"sort"
 	"strings"
-
-	"github.com/jessevdk/go-flags"
 )
 
 var flagParser_ *flags.Parser
@@ -19,9 +18,10 @@ const (
 )
 
 type CommandLineOptions struct {
-	Dispose bool `short:"d" long:"dispose" description:"Dispose of images and directories who was bound to pdf."`
-	Verbose bool `short:"v" long:"verbose" description:"Enable verbose output."`
-	Version bool `short:"V" long:"version" description:"Displays version information."`
+	Concurrency int  `short:"c" long:"concurrency" description:"Concurrency number of converting images to pdf." default:"4"`
+	Dispose     bool `short:"d" long:"dispose" description:"Dispose of images and directories who was bound to pdf."`
+	Verbose     bool `short:"v" long:"verbose" description:"Enable verbose output."`
+	Version     bool `short:"V" long:"version" description:"Displays version information."`
 }
 
 func printHelp() {
@@ -171,15 +171,24 @@ func main() {
 		return
 	}
 
-	targetDirectories, err := targetDirectoryPathsFromArgs(args, true)
+	targetDirectoryPaths, err := targetDirectoryPathsFromArgs(args, true)
 
 	if err != nil {
 		criticalError(err)
 	}
 
-	if len(targetDirectories) == 0 {
+	if len(targetDirectoryPaths) == 0 {
 		criticalError(errors.New("no targets to convert pdf"))
 	}
 
-	fmt.Println(targetDirectories)
+	// 一時ファイル置き場を作成する
+
+	// -----------------------------------------------------------------------------------
+	// Convert images to pdf
+	// -----------------------------------------------------------------------------------
+
+	err = processConvertImagesToPdf(targetDirectoryPaths, opts.Concurrency)
+	if err != nil {
+		criticalError(err)
+	}
 }
