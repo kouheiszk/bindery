@@ -2,8 +2,6 @@ package main
 
 import (
 	"errors"
-	"fmt"
-	"github.com/jessevdk/go-flags"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -11,44 +9,27 @@ import (
 	"strings"
 )
 
-var flagParser_ *flags.Parser
-
 const (
-	APPNAME = "bindery"
+	PROGRAM = "bindery"
+	VERSION = "0.0.1"
 )
-
-type CommandLineOptions struct {
-	Concurrency int  `short:"c" long:"concurrency" description:"Concurrency number of converting images to pdf." default:"4"`
-	Dispose     bool `short:"d" long:"dispose" description:"Dispose of images and directories who was bound to pdf."`
-	Verbose     bool `short:"v" long:"verbose" description:"Enable verbose output."`
-	Version     bool `short:"V" long:"version" description:"Displays version information."`
-}
-
-func printHelp() {
-	flagParser_.WriteHelp(os.Stdout)
-
-	info := `
-Examples:
-  Process all the images in the specified directory:
-  % APPNAME /path/to/images/*
-`
-	fmt.Println(strings.Replace(info, "APPNAME", APPNAME, -1))
-}
 
 func criticalError(err error) {
 	logError("%s", err)
-	logInfo("Run '%s --help' for usage\n", APPNAME)
+	logInfo("Run '%s --help' for usage\n", PROGRAM)
+	onExit()
 	os.Exit(1)
 }
 
 func onExit() {
+	removeTempDirectory()
 }
 
-func targetDirectoryPathsFromArgs(args []string, recursive bool) ([]string, error) {
+func targetDirectoryPathsFromArgs(inputs []string, recursive bool) ([]string, error) {
 	var paths []string
 
-	// Convert args to absolute paths
-	for _, arg := range args {
+	// Convert inputs to absolute paths
+	for _, arg := range inputs {
 		if strings.Index(arg, "*") < 0 {
 			absolutePath, err := filepath.Abs(arg)
 			if err != nil {
@@ -88,8 +69,7 @@ func targetDirectoryPathsFromArgs(args []string, recursive bool) ([]string, erro
 		}
 		if isOnlySupportedImages(children) {
 			targetDirectoryPaths = append(targetDirectoryPaths, path)
-		}
-		if recursive {
+		} else if recursive {
 			children, err = targetDirectoryPathsFromArgs([]string{filepath.Join(path, "*")}, false)
 			if err != nil {
 				continue
@@ -118,77 +98,67 @@ func main() {
 		onExit()
 		os.Exit(2)
 	}()
-
 	defer onExit()
 
 	// -----------------------------------------------------------------------------------
 	// Parse arguments
 	// -----------------------------------------------------------------------------------
 
-	var opts CommandLineOptions
-	flagParser_ = flags.NewParser(&opts, flags.HelpFlag|flags.PassDoubleDash)
-	args, err := flagParser_.Parse()
+	opts, args, err := parseArguments()
 	if err != nil {
-		t := err.(*flags.Error).Type
-		if t == flags.ErrHelp {
-			printHelp()
-			return
-		} else {
-			criticalError(err)
-		}
+		criticalError(err)
 	}
-
+	if opts == nil {
+		return
+	}
 	if opts.Verbose {
 		minLogLevel_ = 0
 	}
 
-	if len(args) == 0 {
-		criticalError(errors.New("no files or directories passed"))
-	}
-
 	// -----------------------------------------------------------------------------------
-	// Handle selected command
+	// Handle version command
 	// -----------------------------------------------------------------------------------
 
-	var commandName string
 	if opts.Version {
-		commandName = "version"
-	} else {
-		commandName = "bind"
-	}
-
-	var commandErr error
-	switch commandName {
-	case "version":
-		commandErr = handleVersionCommand(&opts, args)
-	}
-
-	if commandErr != nil {
-		criticalError(commandErr)
-	}
-
-	if commandName != "bind" {
+		err = printVersion()
+		if err != nil {
+			criticalError(err)
+		}
 		return
 	}
 
-	targetDirectoryPaths, err := targetDirectoryPathsFromArgs(args, true)
+	// -----------------------------------------------------------------------------------
+	// Retrieve target directories
+	// -----------------------------------------------------------------------------------
 
+	targetDirectoryPaths, err := targetDirectoryPathsFromArgs(args, true)
 	if err != nil {
 		criticalError(err)
 	}
-
 	if len(targetDirectoryPaths) == 0 {
 		criticalError(errors.New("no targets to convert pdf"))
 	}
 
-	// 一時ファイル置き場を作成する
+	// -----------------------------------------------------------------------------------
+	// Create temporary directory
+	// -----------------------------------------------------------------------------------
+
+	tempDirectory, err := prepareTempDirectory()
+	if err != nil {
+		criticalError(err)
+	}
 
 	// -----------------------------------------------------------------------------------
 	// Convert images to pdf
 	// -----------------------------------------------------------------------------------
 
-	err = processConvertImagesToPdf(targetDirectoryPaths, opts.Concurrency)
+	err = processConvertImagesToPdf(targetDirectoryPaths, tempDirectory, opts.Concurrency)
 	if err != nil {
 		criticalError(err)
 	}
+
+	// -----------------------------------------------------------------------------------
+	// Move converted pdfs and dispose target directories if needed
+	// -----------------------------------------------------------------------------------
+
 }

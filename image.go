@@ -5,12 +5,24 @@ import (
 	"errors"
 	"fmt"
 	"golang.org/x/sync/errgroup"
+	"image"
 	"math"
-	"math/rand"
+	"os"
 	"path/filepath"
 	"runtime"
-	"time"
+	"sort"
+
+	_ "image/jpeg"
+	_ "image/png"
+
+	"github.com/jung-kurt/gofpdf"
 )
+
+type Image struct {
+	Path   string
+	Width  int
+	Height int
+}
 
 func isSupportedImageExtension(ext string) bool {
 	supported := map[string]bool{
@@ -21,26 +33,101 @@ func isSupportedImageExtension(ext string) bool {
 	return supported[ext]
 }
 
-func isOnlySupportedImages(paths []string) bool {
+func supportedImagePathsFromPaths(paths []string, shouldNotBeContainDirectory bool) ([]string, error) {
+	var images []string
 	for _, path := range paths {
-		if !isSupportedImageExtension(filepath.Ext(path)) {
-			return false
+		state, err := os.Stat(path)
+		if err != nil || state.IsDir() {
+			if shouldNotBeContainDirectory {
+				return nil, errors.New("target directory should not be contain directory")
+			}
+			continue
+		}
+
+		if isSupportedImageExtension(filepath.Ext(path)) {
+			images = append(images, path)
 		}
 	}
-	return true
+	return images, nil
 }
 
-func convertImagesToPdf(directoryPath string) error {
-	fmt.Println(directoryPath)
-	time.Sleep(1600 * time.Millisecond)
-	if rand.Intn(3) == 1 {
-		return errors.New("error")
+func isOnlySupportedImages(paths []string) bool {
+	if len(paths) == 0 {
+		return false
 	}
+
+	imagePaths, err := supportedImagePathsFromPaths(paths, true)
+	if err != nil {
+		return false
+	}
+
+	return len(imagePaths) > 0
+}
+
+func getImageSize(imagePath string) (int, int) {
+	file, err := os.Open(imagePath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%v\n", err)
+	}
+
+	config, _, err := image.DecodeConfig(file)
+	if err != nil {
+		logError("Couldn't get image config: %s", imagePath)
+		criticalError(err)
+	}
+	return config.Width, config.Height
+}
+
+func imagesFromDirectory(directoryPath string) ([]Image, error) {
+	children, err := filepath.Glob(filepath.Join(directoryPath, "*"))
+	if err != nil {
+		return nil, err
+	}
+
+	imagePaths, err := supportedImagePathsFromPaths(children, false)
+	if err != nil {
+		return nil, err
+	}
+
+	sort.Strings(imagePaths)
+
+	var images []Image
+	for _, imagePath := range imagePaths {
+		image := Image{}
+		image.Path = imagePath
+		image.Width, image.Height = getImageSize(imagePath)
+		images = append(images, image)
+	}
+
+	return images, nil
+}
+
+func convertImagesToPdf(directoryPath string, tempBaseDirectory string) error {
+	images, err := imagesFromDirectory(directoryPath)
+	if err != nil {
+		return err
+	}
+
+	pdf := gofpdf.NewCustom(&gofpdf.InitType{
+		UnitStr: "pt",
+		Size:    gofpdf.SizeType{Wd: 0, Ht: 0},
+	})
+	for _, image := range images {
+		pdf.AddPageFormat("P", gofpdf.SizeType{Wd: float64(image.Width), Ht: float64(image.Height)})
+		pdf.Image(image.Path, 0, 0, float64(image.Width), float64(image.Height), false, "", 0, "")
+	}
+	pdfPath := filepath.Join(tempBaseDirectory, filepath.Base(directoryPath)+".pdf")
+	err = pdf.OutputFileAndClose(pdfPath)
+	if err != nil {
+		return err
+	}
+
+	logDebug("Create pdf: %s", pdfPath)
 
 	return nil
 }
 
-func processConvertImagesToPdf(directoryPaths []string, concurrency int) error {
+func processConvertImagesToPdf(directoryPaths []string, tempDirectory string, concurrency int) error {
 	eg, ctx := errgroup.WithContext(context.Background())
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -57,7 +144,7 @@ func processConvertImagesToPdf(directoryPaths []string, concurrency int) error {
 			case <-ctx.Done():
 				return nil
 			default:
-				err := convertImagesToPdf(directoryPath)
+				err := convertImagesToPdf(directoryPath, tempDirectory)
 				if err != nil {
 					cancel()
 				}
