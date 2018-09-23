@@ -18,10 +18,16 @@ func prepareTempDirectory() (string, error) {
 }
 
 func removeTempDirectory() error {
-	err := os.RemoveAll(tempDirectory_)
+	_, err := os.Stat(tempDirectory_)
+	if err != nil {
+		return nil
+	}
+
+	err = os.RemoveAll(tempDirectory_)
 	if err != nil {
 		return err
 	}
+
 	logDebug("Removed temporary directory: %s", tempDirectory_)
 	return nil
 }

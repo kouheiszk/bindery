@@ -24,6 +24,11 @@ type Image struct {
 	Height int
 }
 
+type Pdf struct {
+	Path                string
+	SourceDirectoryPath string
+}
+
 func isSupportedImageExtension(ext string) bool {
 	supported := map[string]bool{
 		".jpg":  true,
@@ -102,10 +107,10 @@ func imagesFromDirectory(directoryPath string) ([]Image, error) {
 	return images, nil
 }
 
-func convertImagesToPdf(directoryPath string, tempBaseDirectory string) error {
+func convertImagesToPdf(directoryPath string, tempBaseDirectory string) (*Pdf, error) {
 	images, err := imagesFromDirectory(directoryPath)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	pdf := gofpdf.NewCustom(&gofpdf.InitType{
@@ -119,15 +124,16 @@ func convertImagesToPdf(directoryPath string, tempBaseDirectory string) error {
 	pdfPath := filepath.Join(tempBaseDirectory, filepath.Base(directoryPath)+".pdf")
 	err = pdf.OutputFileAndClose(pdfPath)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	logDebug("Create pdf: %s", pdfPath)
 
-	return nil
+	return &Pdf{Path: pdfPath, SourceDirectoryPath: directoryPath}, nil
 }
 
-func processConvertImagesToPdf(directoryPaths []string, tempDirectory string, concurrency int) error {
+func processConvertImagesToPdf(directoryPaths []string, tempDirectory string, concurrency int) ([]Pdf, error) {
+	var output []Pdf
 	eg, ctx := errgroup.WithContext(context.Background())
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -144,15 +150,16 @@ func processConvertImagesToPdf(directoryPaths []string, tempDirectory string, co
 			case <-ctx.Done():
 				return nil
 			default:
-				err := convertImagesToPdf(directoryPath, tempDirectory)
+				pdf, err := convertImagesToPdf(directoryPath, tempDirectory)
 				if err != nil {
 					cancel()
 				}
+				output = append(output, *pdf)
 				return err
 			}
 		})
 	}
 
 	err := eg.Wait()
-	return err
+	return output, err
 }

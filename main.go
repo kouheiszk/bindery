@@ -6,7 +6,10 @@ import (
 	"os/signal"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
+
+	"github.com/b4b4r07/gomi/darwin"
 )
 
 const (
@@ -25,7 +28,7 @@ func onExit() {
 	removeTempDirectory()
 }
 
-func targetDirectoryPathsFromArgs(inputs []string, recursive bool) ([]string, error) {
+func sourceDirectoryPathsFromArgs(inputs []string, recursive bool) ([]string, error) {
 	var paths []string
 
 	// Convert inputs to absolute paths
@@ -43,7 +46,7 @@ func targetDirectoryPathsFromArgs(inputs []string, recursive bool) ([]string, er
 		if err != nil {
 			return []string{}, err
 		}
-		children, err := targetDirectoryPathsFromArgs(matches, false)
+		children, err := sourceDirectoryPathsFromArgs(matches, false)
 		if err != nil {
 			return []string{}, err
 		}
@@ -53,11 +56,11 @@ func targetDirectoryPathsFromArgs(inputs []string, recursive bool) ([]string, er
 	// Get one directory up path if all paths are images
 	if isOnlySupportedImages(paths) {
 		directory, _ := filepath.Split(paths[0])
-		return targetDirectoryPathsFromArgs([]string{directory}, false)
+		return sourceDirectoryPathsFromArgs([]string{directory}, false)
 	}
 
 	// Get directory from paths and check exists images in the directories
-	var targetDirectoryPaths []string
+	var sourceDirectoryPaths []string
 	for _, path := range paths {
 		state, err := os.Stat(path)
 		if err != nil || !state.IsDir() {
@@ -68,19 +71,19 @@ func targetDirectoryPathsFromArgs(inputs []string, recursive bool) ([]string, er
 			continue
 		}
 		if isOnlySupportedImages(children) {
-			targetDirectoryPaths = append(targetDirectoryPaths, path)
+			sourceDirectoryPaths = append(sourceDirectoryPaths, path)
 		} else if recursive {
-			children, err = targetDirectoryPathsFromArgs([]string{filepath.Join(path, "*")}, false)
+			children, err = sourceDirectoryPathsFromArgs([]string{filepath.Join(path, "*")}, false)
 			if err != nil {
 				continue
 			}
-			targetDirectoryPaths = append(targetDirectoryPaths, children...)
+			sourceDirectoryPaths = append(sourceDirectoryPaths, children...)
 		}
 	}
 
-	sort.Strings(targetDirectoryPaths)
+	sort.Strings(sourceDirectoryPaths)
 
-	return targetDirectoryPaths, nil
+	return sourceDirectoryPaths, nil
 }
 
 func main() {
@@ -128,15 +131,15 @@ func main() {
 	}
 
 	// -----------------------------------------------------------------------------------
-	// Retrieve target directories
+	// Retrieve source directories
 	// -----------------------------------------------------------------------------------
 
-	targetDirectoryPaths, err := targetDirectoryPathsFromArgs(args, true)
+	sourceDirectoryPaths, err := sourceDirectoryPathsFromArgs(args, true)
 	if err != nil {
 		criticalError(err)
 	}
-	if len(targetDirectoryPaths) == 0 {
-		criticalError(errors.New("no targets to convert pdf"))
+	if len(sourceDirectoryPaths) == 0 {
+		criticalError(errors.New("no sources to convert pdf"))
 	}
 
 	// -----------------------------------------------------------------------------------
@@ -152,13 +155,49 @@ func main() {
 	// Convert images to pdf
 	// -----------------------------------------------------------------------------------
 
-	err = processConvertImagesToPdf(targetDirectoryPaths, tempDirectory, opts.Concurrency)
+	pdfs, err := processConvertImagesToPdf(sourceDirectoryPaths, tempDirectory, opts.Concurrency)
 	if err != nil {
 		criticalError(err)
 	}
 
 	// -----------------------------------------------------------------------------------
-	// Move converted pdfs and dispose target directories if needed
+	// Move converted pdfs
 	// -----------------------------------------------------------------------------------
 
+	for _, pdf := range pdfs {
+		destPath := filepath.Join(filepath.Dir(pdf.SourceDirectoryPath), filepath.Base(pdf.Path))
+
+		// Filename duplicate guard
+		extension := filepath.Ext(destPath)
+		destPathBase := destPath[0:strings.Index(destPath, extension)]
+		i := 0
+		for {
+			_, err := os.Stat(destPath)
+			if err != nil {
+				break
+			}
+			i += 1
+			destPath = destPathBase + " (" + strconv.Itoa(i) + ")" + extension
+		}
+
+		// Move pdf to source directory's directory from temporary directory
+		if err := os.Rename(pdf.Path, destPath); err != nil {
+			criticalError(err)
+		}
+	}
+
+	// -----------------------------------------------------------------------------------
+	// Dispose source directories if needed
+	// -----------------------------------------------------------------------------------
+
+	if opts.Dispose {
+		for _, pdf := range pdfs {
+			_, err := darwin.Trash(pdf.SourceDirectoryPath)
+			if err != nil {
+				if err := os.RemoveAll(pdf.SourceDirectoryPath); err != nil {
+					logError("%s", err)
+				}
+			}
+		}
+	}
 }

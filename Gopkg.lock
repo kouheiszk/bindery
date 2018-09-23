@@ -2,6 +2,12 @@
 
 
 [[projects]]
+  name = "github.com/b4b4r07/gomi"
+  packages = ["darwin"]
+  revision = "527cbad135501e20acad925973bb44bf3decba95"
+  version = "v0.1.7"
+
+[[projects]]
   name = "github.com/jessevdk/go-flags"
   packages = ["."]
   revision = "c6ca198ec95c841fdb89fc0de7496fed11ab854e"
@@ -28,6 +34,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "9c74eb9e9a4637290a6467b9c1955920fef38d373a83eeddac1a4a5bb800d297"
+  inputs-digest = "04c3237586bfacad3a6c46cfb742919a2bdcb3d505f667a3ba05af1dae523351"
   solver-name = "gps-cdcl"
   solver-version = 1
