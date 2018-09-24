@@ -10,13 +10,13 @@ import (
 )
 
 const (
-	PROGRAM = "bindery"
-	VERSION = "0.0.1"
+	Name    = "bindery"
+	Version = "0.0.1"
 )
 
 func criticalError(err error) {
 	logError("%s", err)
-	logInfo("Run '%s --help' for usage\n", PROGRAM)
+	logInfo("Run '%s --help' for usage\n", Name)
 	onExit()
 	os.Exit(1)
 }
@@ -84,7 +84,7 @@ func sourceDirectoryPathsFromArgs(inputs []string, recursive bool) ([]string, er
 }
 
 func main() {
-	minLogLevel_ = 2 // TODO: 定数にする
+	minLogLevel_ = LogLevelError
 
 	// -----------------------------------------------------------------------------------
 	// Handle SIGINT (Ctrl + C)
@@ -112,7 +112,7 @@ func main() {
 		return
 	}
 	if opts.Verbose {
-		minLogLevel_ = 0
+		minLogLevel_ = LogLevelDebug
 	}
 
 	// -----------------------------------------------------------------------------------

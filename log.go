@@ -4,23 +4,29 @@ import (
 	"fmt"
 )
 
+const (
+	LogLevelDebug = 0
+	LogLevelInfo  = 1
+	LogLevelError = 2
+)
+
 var minLogLevel_ int
 
 func log(level int, s string, a ...interface{}) {
 	if level < minLogLevel_ {
 		return
 	}
-	fmt.Printf(PROGRAM+": "+s+"\n", a...)
+	fmt.Printf(Name+": "+s+"\n", a...)
 }
 
 func logDebug(s string, a ...interface{}) {
-	log(0, s, a...)
+	log(LogLevelDebug, s, a...)
 }
 
 func logInfo(s string, a ...interface{}) {
-	log(1, s, a...)
+	log(LogLevelInfo, s, a...)
 }
 
 func logError(s string, a ...interface{}) {
-	log(3, s, a...)
+	log(LogLevelError, s, a...)
 }

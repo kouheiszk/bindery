@@ -8,7 +8,7 @@ import (
 var tempDirectory_ string
 
 func prepareTempDirectory() (string, error) {
-	dir, err := ioutil.TempDir("", PROGRAM)
+	dir, err := ioutil.TempDir("", Name)
 	if err != nil {
 		return dir, err
 	}

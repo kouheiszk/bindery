@@ -40,12 +40,12 @@ func printHelp() {
 	info := `
 Examples:
   Process all the images in the specified directory:
-  % PROGRAM /path/to/images/*
+  % Name /path/to/images/*
 `
-	fmt.Println(strings.Replace(info, "PROGRAM", PROGRAM, -1))
+	fmt.Println(strings.Replace(info, "Name", Name, -1))
 }
 
 func printVersion() error {
-	fmt.Println(VERSION)
+	fmt.Println(Version)
 	return nil
 }
