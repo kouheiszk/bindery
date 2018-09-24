@@ -38,7 +38,7 @@ func isSupportedImageExtension(ext string) bool {
 		".jpeg": true,
 		".png":  true,
 	}
-	return supported[ext]
+	return supported[strings.ToLower(ext)]
 }
 
 func supportedImagePathsFromPaths(paths []string, shouldNotBeContainDirectory bool) ([]string, error) {
