@@ -6,10 +6,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"sort"
-	"strconv"
 	"strings"
-
-	"github.com/b4b4r07/gomi/darwin"
 )
 
 const (
@@ -155,50 +152,8 @@ func main() {
 	// Convert images to pdf
 	// -----------------------------------------------------------------------------------
 
-	pdfs, err := processConvertImagesToPdf(sourceDirectoryPaths, tempDirectory, opts.Concurrency)
+	err = processConvertImagesToPdf(sourceDirectoryPaths, tempDirectory, opts.Concurrency, opts.Dispose)
 	if err != nil {
 		criticalError(err)
-	}
-
-	// -----------------------------------------------------------------------------------
-	// Move converted pdfs
-	// -----------------------------------------------------------------------------------
-
-	for _, pdf := range pdfs {
-		destPath := filepath.Join(filepath.Dir(pdf.SourceDirectoryPath), filepath.Base(pdf.Path))
-
-		// Filename duplicate guard
-		extension := filepath.Ext(destPath)
-		destPathBase := destPath[0:strings.Index(destPath, extension)]
-		i := 0
-		for {
-			_, err := os.Stat(destPath)
-			if err != nil {
-				break
-			}
-			i += 1
-			destPath = destPathBase + " (" + strconv.Itoa(i) + ")" + extension
-		}
-
-		// Move pdf to source directory's directory from temporary directory
-		if err := os.Rename(pdf.Path, destPath); err != nil {
-			criticalError(err)
-		}
-	}
-
-	// -----------------------------------------------------------------------------------
-	// Dispose source directories if needed
-	// -----------------------------------------------------------------------------------
-
-	// TODO: 使ってみたけど、PDF生成完了したらソースディレクトリ削除してOK
-	if opts.Dispose {
-		for _, pdf := range pdfs {
-			_, err := darwin.Trash(pdf.SourceDirectoryPath)
-			if err != nil {
-				if err := os.RemoveAll(pdf.SourceDirectoryPath); err != nil {
-					logError("%s", err)
-				}
-			}
-		}
 	}
 }

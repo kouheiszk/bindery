@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"github.com/b4b4r07/gomi/darwin"
 	"golang.org/x/sync/errgroup"
 	"image"
 	_ "image/jpeg"
@@ -14,6 +15,8 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
+	"strings"
 
 	"github.com/jung-kurt/gofpdf"
 )
@@ -163,8 +166,7 @@ func convertImagesToPdf(directoryPath string, tempBaseDirectory string) (*Pdf, e
 	return &Pdf{Path: pdfPath, SourceDirectoryPath: directoryPath}, nil
 }
 
-func processConvertImagesToPdf(directoryPaths []string, tempDirectory string, concurrency int) ([]Pdf, error) {
-	var output []Pdf
+func processConvertImagesToPdf(directoryPaths []string, tempDirectory string, concurrency int, dispose bool) error {
 	eg, ctx := errgroup.WithContext(context.Background())
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -184,13 +186,45 @@ func processConvertImagesToPdf(directoryPaths []string, tempDirectory string, co
 				pdf, err := convertImagesToPdf(directoryPath, tempDirectory)
 				if err != nil {
 					cancel()
+					return err
 				}
-				output = append(output, *pdf)
-				return err
+
+				// Declare destination path
+				destPath := filepath.Join(filepath.Dir(pdf.SourceDirectoryPath), filepath.Base(pdf.Path))
+
+				// Filename duplicate guard
+				extension := filepath.Ext(destPath)
+				destPathBase := destPath[0:strings.Index(destPath, extension)]
+				i := 0
+				for {
+					_, err := os.Stat(destPath)
+					if err != nil {
+						break
+					}
+					i += 1
+					destPath = destPathBase + " (" + strconv.Itoa(i) + ")" + extension
+				}
+
+				// Move pdf to source directory's directory from temporary directory
+				if err := os.Rename(pdf.Path, destPath); err != nil {
+					criticalError(err)
+				}
+
+				// Dispose source directories if needed
+				if dispose {
+					_, err := darwin.Trash(pdf.SourceDirectoryPath)
+					if err != nil {
+						if err := os.RemoveAll(pdf.SourceDirectoryPath); err != nil {
+							logError("%s", err)
+						}
+					}
+				}
+
+				return nil
 			}
 		})
 	}
 
 	err := eg.Wait()
-	return output, err
+	return err
 }
