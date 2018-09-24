@@ -87,7 +87,7 @@ func sourceDirectoryPathsFromArgs(inputs []string, recursive bool) ([]string, er
 }
 
 func main() {
-	minLogLevel_ = 0
+	minLogLevel_ = 2 // TODO: 定数にする
 
 	// -----------------------------------------------------------------------------------
 	// Handle SIGINT (Ctrl + C)
@@ -190,6 +190,7 @@ func main() {
 	// Dispose source directories if needed
 	// -----------------------------------------------------------------------------------
 
+	// TODO: 使ってみたけど、PDF生成完了したらソースディレクトリ削除してOK
 	if opts.Dispose {
 		for _, pdf := range pdfs {
 			_, err := darwin.Trash(pdf.SourceDirectoryPath)

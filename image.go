@@ -1,27 +1,27 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"errors"
-	"fmt"
 	"golang.org/x/sync/errgroup"
 	"image"
+	_ "image/jpeg"
+	"image/png"
+	_ "image/png"
+	"io/ioutil"
 	"math"
 	"os"
 	"path/filepath"
 	"runtime"
-	"sort"
-
-	_ "image/jpeg"
-	_ "image/png"
 
 	"github.com/jung-kurt/gofpdf"
 )
 
-type Image struct {
-	Path   string
-	Width  int
-	Height int
+type Page struct {
+	ImagePath string
+	Width     int
+	Height    int
 }
 
 type Pdf struct {
@@ -69,21 +69,52 @@ func isOnlySupportedImages(paths []string) bool {
 	return len(imagePaths) > 0
 }
 
-func getImageSize(imagePath string) (int, int) {
+func createPageFromImagePath(imagePath string, tempBaseDirectory string) (*Page, error) {
 	file, err := os.Open(imagePath)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "%v\n", err)
+		logError("Couldn't open image: %s", imagePath)
+		return nil, err
+	}
+	defer file.Close()
+
+	b, _ := ioutil.ReadAll(file)
+
+	m, encode, err := image.Decode(bytes.NewReader(b))
+	if err != nil {
+		logError("Couldn't decode image: %s", imagePath)
+		return nil, err
 	}
 
-	config, _, err := image.DecodeConfig(file)
+	config, _, err := image.DecodeConfig(bytes.NewReader(b))
 	if err != nil {
 		logError("Couldn't get image config: %s", imagePath)
-		criticalError(err)
+		return nil, err
 	}
-	return config.Width, config.Height
+
+	switch encode {
+	case "jpeg":
+	case "png":
+		// TODO: インターレースのPNGは変換できないので、PNGはJPEGに変換してからPDFにする
+		// TODO: PNGのdocoderを取得できればinterlacingかどうか判断できるが
+		// TODO: gofpdfがインターレースをサポートするようにプルリクを送るか...
+		// TODO: PNGの仕様を調査する
+		newImageFile, _ := os.OpenFile(imagePath, os.O_WRONLY|os.O_CREATE, 0600)
+		defer newImageFile.Close()
+		png.Encode(newImageFile, m)
+	default:
+		logError("Couldn't read images: %s", encode)
+		return nil, errors.New("unsupported image type")
+	}
+
+	page := Page{}
+	page.ImagePath = imagePath
+	page.Width = config.Width
+	page.Height = config.Height
+
+	return &page, nil
 }
 
-func imagesFromDirectory(directoryPath string) ([]Image, error) {
+func pagesFromDirectory(directoryPath string, tempBaseDirectory string) ([]Page, error) {
 	children, err := filepath.Glob(filepath.Join(directoryPath, "*"))
 	if err != nil {
 		return nil, err
@@ -94,41 +125,41 @@ func imagesFromDirectory(directoryPath string) ([]Image, error) {
 		return nil, err
 	}
 
-	sort.Strings(imagePaths)
-
-	var images []Image
+	var pages []Page
 	for _, imagePath := range imagePaths {
-		image := Image{}
-		image.Path = imagePath
-		image.Width, image.Height = getImageSize(imagePath)
-		images = append(images, image)
+		page, err := createPageFromImagePath(imagePath, tempBaseDirectory)
+		if err != nil {
+			return nil, err
+		}
+		pages = append(pages, *page)
 	}
 
-	return images, nil
+	return pages, nil
 }
 
 func convertImagesToPdf(directoryPath string, tempBaseDirectory string) (*Pdf, error) {
-	images, err := imagesFromDirectory(directoryPath)
+	logDebug("Start create pdf from: %s", directoryPath)
+	pages, err := pagesFromDirectory(directoryPath, tempBaseDirectory)
 	if err != nil {
 		return nil, err
 	}
 
-	pdf := gofpdf.NewCustom(&gofpdf.InitType{
-		UnitStr: "pt",
-		Size:    gofpdf.SizeType{Wd: 0, Ht: 0},
-	})
-	for _, image := range images {
-		pdf.AddPageFormat("P", gofpdf.SizeType{Wd: float64(image.Width), Ht: float64(image.Height)})
-		pdf.Image(image.Path, 0, 0, float64(image.Width), float64(image.Height), false, "", 0, "")
+	pdf := gofpdf.NewCustom(&gofpdf.InitType{UnitStr: "pt", Size: gofpdf.SizeType{Wd: 0, Ht: 0}})
+	for _, page := range pages {
+		pdf.AddPageFormat("P", gofpdf.SizeType{Wd: float64(page.Width), Ht: float64(page.Height)})
+		pdf.Image(page.ImagePath, 0, 0, float64(page.Width), float64(page.Height), false, "", 0, "")
 	}
+
 	pdfPath := filepath.Join(tempBaseDirectory, filepath.Base(directoryPath)+".pdf")
+	logDebug("Output pdf: %s", pdfPath)
+
 	err = pdf.OutputFileAndClose(pdfPath)
 	if err != nil {
+		logError("Couldn't generate pdf: %s", pdfPath)
 		return nil, err
 	}
 
-	logDebug("Create pdf: %s", pdfPath)
-
+	logInfo("PDF is created: %s", pdfPath)
 	return &Pdf{Path: pdfPath, SourceDirectoryPath: directoryPath}, nil
 }
 
