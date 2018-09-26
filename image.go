@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"github.com/b4b4r07/gomi/darwin"
 	"golang.org/x/sync/errgroup"
 	"image"
 	_ "image/jpeg"
@@ -15,7 +14,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"strconv"
+	"sort"
 	"strings"
 
 	"github.com/jung-kurt/gofpdf"
@@ -25,11 +24,6 @@ type Page struct {
 	ImagePath string
 	Width     int
 	Height    int
-}
-
-type Pdf struct {
-	Path                string
-	SourceDirectoryPath string
 }
 
 func isSupportedImageExtension(ext string) bool {
@@ -137,14 +131,23 @@ func pagesFromDirectory(directoryPath string, tempBaseDirectory string) ([]Page,
 		pages = append(pages, *page)
 	}
 
+	sort.Slice(pages, func(i, j int) bool {
+		lht := pages[i].ImagePath
+		rht := pages[j].ImagePath
+		// TODO: Unicode Collation Algorithm で並び替える
+		// ref: https://support.apple.com/kb/TA22935?locale=ja_JP
+		// ref: http://unicode.org/reports/tr10/
+		return lht < rht
+	})
+
 	return pages, nil
 }
 
-func convertImagesToPdf(directoryPath string, tempBaseDirectory string) (*Pdf, error) {
-	logDebug("Start create pdf from: %s", directoryPath)
-	pages, err := pagesFromDirectory(directoryPath, tempBaseDirectory)
+func convertImagesToPdf(sourceDirectoryPath string, destPath string, tempBaseDirectory string, dispose bool) error {
+	logDebug("Start create pdf from: %s", sourceDirectoryPath)
+	pages, err := pagesFromDirectory(sourceDirectoryPath, tempBaseDirectory)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	pdf := gofpdf.NewCustom(&gofpdf.InitType{UnitStr: "pt", Size: gofpdf.SizeType{Wd: 0, Ht: 0}})
@@ -153,20 +156,26 @@ func convertImagesToPdf(directoryPath string, tempBaseDirectory string) (*Pdf, e
 		pdf.Image(page.ImagePath, 0, 0, float64(page.Width), float64(page.Height), false, "", 0, "")
 	}
 
-	pdfPath := filepath.Join(tempBaseDirectory, filepath.Base(directoryPath)+".pdf")
-	logDebug("Output pdf: %s", pdfPath)
+	logDebug("Output pdf: %s", destPath)
 
-	err = pdf.OutputFileAndClose(pdfPath)
+	err = pdf.OutputFileAndClose(destPath)
 	if err != nil {
-		logError("Couldn't generate pdf: %s", pdfPath)
-		return nil, err
+		logError("Couldn't generate pdf: %s", destPath)
+		return err
 	}
 
-	logInfo("PDF is created: %s", pdfPath)
-	return &Pdf{Path: pdfPath, SourceDirectoryPath: directoryPath}, nil
+	logInfo("PDF is created: %s", destPath)
+
+	// Dispose source directories if needed
+	if dispose {
+		logInfo("Dispose source directory: %s", sourceDirectoryPath)
+		trashDirectory(sourceDirectoryPath)
+	}
+
+	return nil
 }
 
-func processConvertImagesToPdf(directoryPaths []string, tempDirectory string, concurrency int, dispose bool) error {
+func processConvertImagesToPdf(directoryPaths []string, tempDirectoryPath string, concurrency int, dispose bool) error {
 	eg, ctx := errgroup.WithContext(context.Background())
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -183,41 +192,11 @@ func processConvertImagesToPdf(directoryPaths []string, tempDirectory string, co
 			case <-ctx.Done():
 				return nil
 			default:
-				pdf, err := convertImagesToPdf(directoryPath, tempDirectory)
+				destPath := destPathFromSourceDirectoryPath(directoryPath)
+				err := convertImagesToPdf(directoryPath, destPath, tempDirectoryPath, dispose)
 				if err != nil {
 					cancel()
 					return err
-				}
-
-				// Declare destination path
-				destPath := filepath.Join(filepath.Dir(pdf.SourceDirectoryPath), filepath.Base(pdf.Path))
-
-				// Filename duplicate guard
-				extension := filepath.Ext(destPath)
-				destPathBase := destPath[0:strings.Index(destPath, extension)]
-				i := 0
-				for {
-					_, err := os.Stat(destPath)
-					if err != nil {
-						break
-					}
-					i += 1
-					destPath = destPathBase + " (" + strconv.Itoa(i) + ")" + extension
-				}
-
-				// Move pdf to source directory's directory from temporary directory
-				if err := os.Rename(pdf.Path, destPath); err != nil {
-					criticalError(err)
-				}
-
-				// Dispose source directories if needed
-				if dispose {
-					_, err := darwin.Trash(pdf.SourceDirectoryPath)
-					if err != nil {
-						if err := os.RemoveAll(pdf.SourceDirectoryPath); err != nil {
-							logError("%s", err)
-						}
-					}
 				}
 
 				return nil
