@@ -14,17 +14,10 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"sort"
 	"strings"
 
 	"github.com/jung-kurt/gofpdf"
 )
-
-type Page struct {
-	ImagePath string
-	Width     int
-	Height    int
-}
 
 func isSupportedImageExtension(ext string) bool {
 	supported := map[string]bool{
@@ -131,14 +124,7 @@ func pagesFromDirectory(directoryPath string, tempBaseDirectory string) ([]Page,
 		pages = append(pages, *page)
 	}
 
-	sort.Slice(pages, func(i, j int) bool {
-		lht := pages[i].ImagePath
-		rht := pages[j].ImagePath
-		// TODO: Unicode Collation Algorithm で並び替える
-		// ref: https://support.apple.com/kb/TA22935?locale=ja_JP
-		// ref: http://unicode.org/reports/tr10/
-		return lht < rht
-	})
+	PageSort(pages)
 
 	return pages, nil
 }

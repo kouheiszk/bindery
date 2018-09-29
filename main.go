@@ -2,10 +2,8 @@ package main
 
 import (
 	"errors"
-	"fmt"
 	"os"
 	"os/signal"
-	"unicode"
 )
 
 const (
@@ -26,10 +24,6 @@ func onExit() {
 
 func main() {
 	minLogLevel_ = LogLevelError
-
-	unicode.IsLetter("0")
-	fmt.Println("001" < "002")
-	return
 
 	// -----------------------------------------------------------------------------------
 	// Handle SIGINT (Ctrl + C)

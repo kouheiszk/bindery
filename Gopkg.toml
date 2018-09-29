@@ -44,3 +44,7 @@
 [[constraint]]
   name = "github.com/b4b4r07/gomi"
   version = "0.1.7"
+
+[[constraint]]
+  name = "golang.org/x/text"
+  version = "0.3.0"

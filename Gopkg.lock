@@ -31,9 +31,27 @@
   packages = ["errgroup"]
   revision = "1d60e4601c6fd243af51cc01ddf169918a5407ca"
 
+[[projects]]
+  name = "golang.org/x/text"
+  packages = [
+    "collate",
+    "collate/build",
+    "internal/colltab",
+    "internal/gen",
+    "internal/tag",
+    "internal/triegen",
+    "internal/ucd",
+    "language",
+    "transform",
+    "unicode/cldr",
+    "unicode/norm"
+  ]
+  revision = "f21a4dfb5e38f5895301dc265a8def02365cc3d0"
+  version = "v0.3.0"
+
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "04c3237586bfacad3a6c46cfb742919a2bdcb3d505f667a3ba05af1dae523351"
+  inputs-digest = "620900e444e1ea444ce93816f08cee12e23eca3cd275e1f05d61d8559088f372"
   solver-name = "gps-cdcl"
   solver-version = 1
