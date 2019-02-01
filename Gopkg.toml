@@ -40,6 +40,7 @@
 [[constraint]]
   name = "github.com/jung-kurt/gofpdf"
   version = "1.0.0"
+  source = "github.com/jung-kurt/gofpdf"
 
 [[constraint]]
   name = "github.com/b4b4r07/gomi"

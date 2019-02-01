@@ -7,7 +7,6 @@ import (
 	"golang.org/x/sync/errgroup"
 	"image"
 	_ "image/jpeg"
-	"image/png"
 	_ "image/png"
 	"io/ioutil"
 	"math"
@@ -68,14 +67,7 @@ func createPageFromImagePath(imagePath string, tempBaseDirectory string) (*Page,
 	defer file.Close()
 
 	b, _ := ioutil.ReadAll(file)
-
-	m, encode, err := image.Decode(bytes.NewReader(b))
-	if err != nil {
-		logError("Couldn't decode image: %s", imagePath)
-		return nil, err
-	}
-
-	config, _, err := image.DecodeConfig(bytes.NewReader(b))
+	config, encode, err := image.DecodeConfig(bytes.NewReader(b))
 	if err != nil {
 		logError("Couldn't get image config: %s", imagePath)
 		return nil, err
@@ -84,13 +76,6 @@ func createPageFromImagePath(imagePath string, tempBaseDirectory string) (*Page,
 	switch encode {
 	case "jpeg":
 	case "png":
-		// TODO: インターレースのPNGは変換できないので、PNGはJPEGに変換してからPDFにする
-		// TODO: PNGのdocoderを取得できればinterlacingかどうか判断できるが
-		// TODO: gofpdfがインターレースをサポートするようにプルリクを送るか...
-		// TODO: PNGの仕様を調査する
-		newImageFile, _ := os.OpenFile(imagePath, os.O_WRONLY|os.O_CREATE, 0600)
-		defer newImageFile.Close()
-		png.Encode(newImageFile, m)
 	default:
 		logError("Couldn't read images: %s", encode)
 		return nil, errors.New("unsupported image type")
